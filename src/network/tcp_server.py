@@ -2,6 +2,7 @@ import asyncio
 import io
 
 from src.protocol.parser import parse_resp
+from src.services.command_dispatcher import dispatch_command
 
 
 async def handle_client(reader: asyncio.StreamReader, writer: asyncio.StreamWriter):
@@ -21,14 +22,13 @@ async def handle_client(reader: asyncio.StreamReader, writer: asyncio.StreamWrit
             print(f"[<-] Получено от {addr}: {command_parts}")
 
             if isinstance(command_parts, list) and len(command_parts) > 0:
-                command_name = str(command_parts[0]).upper()
+                response_str = await dispatch_command(command_parts)
+                response_bytes = response_str.encode('utf-8')
                 
-                if command_name == "PING":
-                    response = b"+PONG\r\n"
-                    writer.write(response)
-                    await writer.drain()
-                    print(f"[->] Отправлено для {addr}: {response}")
-                    continue 
+                writer.write(response_bytes)
+                await writer.drain()
+                print(f"[->] Отправлено для {addr}: {response_str.strip()}")
+                continue 
 
             error_response = b"-ERR unknown command\r\n"
             writer.write(error_response)
