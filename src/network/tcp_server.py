@@ -3,9 +3,14 @@ import io
 
 from src.protocol.parser import parse_resp
 from src.services.command_dispatcher import dispatch_command
+from src.storage.storage import Storage
 
 
-async def handle_client(reader: asyncio.StreamReader, writer: asyncio.StreamWriter):
+async def handle_client(
+    reader: asyncio.StreamReader, 
+    writer: asyncio.StreamWriter,
+    storage: Storage
+):
     addr = writer.get_extra_info('peername')
     print(f"[*] Новое подключение от {addr}")
 
@@ -22,7 +27,7 @@ async def handle_client(reader: asyncio.StreamReader, writer: asyncio.StreamWrit
             print(f"[<-] Получено от {addr}: {command_parts}")
 
             if isinstance(command_parts, list) and len(command_parts) > 0:
-                response_str = await dispatch_command(command_parts)
+                response_str = await dispatch_command(command_parts, storage)
                 response_bytes = response_str.encode('utf-8')
                 
                 writer.write(response_bytes)
