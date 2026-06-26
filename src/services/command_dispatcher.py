@@ -16,6 +16,14 @@ async def dispatch_command(payload: list[str], storage: Storage) -> str:
             await storage.set(key, value)
             return "+OK\r\n"
         
+        case "SET", [key, value, "EX", ttl_str]:
+            try:
+                ttl = int(ttl_str)
+                await storage.set(key, value)
+                return "+OK\r\n"
+            except ValueError:
+                return "-ERR value is not an integer or out of range\r\n"
+        
         case "GET", [key]:
             value = await storage.get(key)
             if value is None:

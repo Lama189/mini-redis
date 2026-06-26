@@ -6,9 +6,14 @@ class Storage:
     def __init__(self):
         self._storage: dict[str, dict[str, Any]] = {}
 
-    async def set(self, key: str, value: str) -> None:
+    async def set(self, key: str, value: str, ttl: int | None = None) -> None:
+        expires_at = None
+        if ttl is not None:
+            expires_at = time.time() + ttl
+
         self._storage[key] = {
-            "value": value
+            "value": value,
+            "expires_at": expires_at
         }
 
     async def get(self, key: str) -> str | None:
@@ -16,6 +21,12 @@ class Storage:
             return None
         
         item = self._storage[key]
+        expires_at = item["expires_at"]
+
+        if expires_at is not None and time.time() > expires_at:
+            del self._storage[key]
+            return None
+
         return item["value"]
     
     async def delete(self, keys: list[str]) -> int:
