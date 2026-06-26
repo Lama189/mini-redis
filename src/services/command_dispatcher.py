@@ -1,39 +1,35 @@
-from src.storage.storage import Storage
+from src.services.redis_service import RedisService
 
 
-async def dispatch_command(payload: list[str], storage: Storage) -> str:
+async def dispatch_command(payload: list[str], service: RedisService) -> str:
     command = payload[0].upper()
     args = payload[1:]
 
     match command, args:
-        case "PING", []:
-            return "+PONG\r\n"
-        
-        case "PING", [message]:
-            return f"${len(message)}\r\n{message}\r\n"
-        
         case "SET", [key, value]:
-            await storage.set(key, value)
+            await service.set(key, value)
             return "+OK\r\n"
-        
+
         case "SET", [key, value, "EX", ttl_str]:
             try:
                 ttl = int(ttl_str)
-                await storage.set(key, value)
-                return "+OK\r\n"
             except ValueError:
                 return "-ERR value is not an integer or out of range\r\n"
-        
+
+            await service.set(key, value, ttl)
+            return "+OK\r\n"
+
         case "GET", [key]:
-            value = await storage.get(key)
+            value = await service.get(key)
+
             if value is None:
                 return "$-1\r\n"
-            
+
             return f"${len(value)}\r\n{value}\r\n"
-        
-        case "DEL", [*keys] if len(keys) > 0:
-            deleted_count = await storage.delete(keys)
-            return f":{deleted_count}\r\n"
+
+        case "DEL", [*keys] if keys:
+            deleted = await service.delete(keys)
+            return f":{deleted}\r\n"
 
         case _:
             return f"-ERR unknown command '{command}'\r\n"

@@ -1,33 +1,28 @@
 import time
 from typing import Any
 
+from src.domain.entry import Entry
+from src.interfaces.repository import IEntryRepository
 
-class Storage:
+
+class RedisRepository(IEntryRepository):
     def __init__(self):
-        self._storage: dict[str, dict[str, Any]] = {}
+        self._storage: dict[str, Entry] = {}
 
-    async def set(self, key: str, value: str, ttl: int | None = None) -> None:
-        expires_at = None
-        if ttl is not None:
-            expires_at = time.time() + ttl
-
-        self._storage[key] = {
-            "value": value,
-            "expires_at": expires_at
-        }
-
-    async def get(self, key: str) -> str | None:
+    async def set(self, key: str, entry: Entry) -> None:
+        self._storage[key] = entry
+        
+    async def get(self, key: str) -> Entry | None:
         if key not in self._storage:
             return None
         
         item = self._storage[key]
-        expires_at = item["expires_at"]
 
-        if expires_at is not None and time.time() > expires_at:
+        if item.expire_at is not None and time.time() > item.expire_at:
             del self._storage[key]
             return None
 
-        return item["value"]
+        return item
     
     async def delete(self, keys: list[str]) -> int:
         deleted_count = 0

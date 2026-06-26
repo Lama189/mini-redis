@@ -3,51 +3,37 @@ import io
 
 from src.protocol.parser import parse_resp
 from src.services.command_dispatcher import dispatch_command
-from src.storage.storage import Storage
+from src.services.redis_service import RedisService
 
 
 async def handle_client(
-    reader: asyncio.StreamReader, 
+    reader: asyncio.StreamReader,
     writer: asyncio.StreamWriter,
-    storage: Storage
+    service: RedisService,
 ):
-    addr = writer.get_extra_info('peername')
+    addr = writer.get_extra_info("peername")
     print(f"[*] Новое подключение от {addr}")
 
     try:
         while True:
             data = await reader.read(1024)
+
             if not data:
-                print(f"[-] Клиент {addr} отключился")
                 break
-            
+
             buffer = io.BytesIO(data)
-            command_parts = parse_resp(buffer)
+            command = parse_resp(buffer)
 
-            print(f"[<-] Получено от {addr}: {command_parts}")
-
-            if isinstance(command_parts, list) and len(command_parts) > 0:
-                response_str = await dispatch_command(command_parts, storage)
-                response_bytes = response_str.encode('utf-8')
-                
-                writer.write(response_bytes)
+            if not isinstance(command, list):
+                writer.write(b"-ERR protocol error\r\n")
                 await writer.drain()
-                print(f"[->] Отправлено для {addr}: {response_str.strip()}")
-                continue 
+                continue
 
-            error_response = b"-ERR unknown command\r\n"
-            writer.write(error_response)
+            response = await dispatch_command(command, service)
+
+            writer.write(response.encode())
             await writer.drain()
-    
-    except asyncio.CancelledError:
-        pass
-    except Exception as e:
-        print(f"[!] Ошибка при работе с клиентом {addr}: {e}")
+
     finally:
         writer.close()
         await writer.wait_closed()
-        print(f"[*] Соединение с {addr} полностью закрыто.")
-        
-                
-
-
