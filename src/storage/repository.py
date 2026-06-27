@@ -1,4 +1,5 @@
 import time
+import random
 
 from src.domain.entities.entry import Entry
 from src.domain.values.hash import RedisHash
@@ -17,13 +18,7 @@ class RedisRepository(IEntryRepository):
         if key not in self._storage:
             return None
         
-        item = self._storage[key]
-
-        if item.expire_at is not None and time.time() > item.expire_at:
-            del self._storage[key]
-            return None
-
-        return item
+        return self._storage[key]
     
     async def delete(self, keys: list[str]) -> int:
         deleted_count = 0
@@ -117,5 +112,26 @@ class RedisRepository(IEntryRepository):
             return {}
         
         return actual_dict
+    
+    async def expire_active_step(self) -> None:
+        current_time = time.time()
+
+        ttl_keys = [k for k, entry in self._storage.items() if entry.expire_at is not None]
+        if not ttl_keys:
+            return
         
+        while True:
+            sample_size = min(20, len(ttl_keys))
+            sampled_keys = random.sample(ttl_keys, sample_size)
+
+            expired_count = 0
+            for key in sampled_keys:
+                entry = self._storage.get(key)
+                if entry and entry.expire_at is not None and current_time > entry.expire_at:
+                    self._storage.pop(key, None)
+                    ttl_keys.remove(key) 
+                    expired_count += 1
+
+            if sample_size == 0 or (expired_count / sample_size) <= 0.25:
+                break
 

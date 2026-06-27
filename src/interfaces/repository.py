@@ -35,3 +35,7 @@ class IEntryRepository(ABC):
     @abstractmethod
     async def hgetall(self, key: str) -> dict:
         raise NotImplementedError
+    
+    @abstractmethod
+    async def expire_active_step(self) -> None:
+        raise NotImplementedError
