@@ -48,7 +48,7 @@ class RedisService:
         await self._repo.set(key, entry)
         return len(fields)
 
-    async def hget(self, key: str, field) -> str | None:
+    async def hget(self, key: str, field: str) -> str | None:
         value = await self._repo.hget(key, field)
 
         if value is None:
@@ -58,3 +58,9 @@ class RedisService:
     
     async def hdel(self, key: str, fields: list[str] | None) -> int:
         return await self._repo.hdel(key, fields)
+    
+    async def hexists(self, key: str, field: str) -> int:
+        return await self._repo.hexists(key, field)
+    
+    async def hlen(self, key: str) -> int:
+        return await self._repo.hlen(key)

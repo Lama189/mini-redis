@@ -23,3 +23,11 @@ class IEntryRepository(ABC):
     @abstractmethod
     async def hdel(self, key: str, fields: list[str] | None) -> int:
         raise NotImplementedError
+    
+    @abstractmethod
+    async def hexists(self, key: str, field: str) -> int:
+        raise NotImplementedError
+    
+    @abstractmethod
+    async def hlen(self, key: str) -> int:
+        raise NotImplementedError

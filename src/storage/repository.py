@@ -1,7 +1,8 @@
 import time
-from typing import Any
 
 from src.domain.entities.entry import Entry
+from src.domain.values.hash import RedisHash
+from src.domain.exceptions import WrongTypeException
 from src.interfaces.repository import IEntryRepository
 
 
@@ -40,6 +41,9 @@ class RedisRepository(IEntryRepository):
         entry = await self.get(key)
         if entry is None:
             return None
+        
+        if not isinstance(entry.value, RedisHash):
+            raise WrongTypeException()
 
         try:
             actual_dict = entry.value.value
@@ -51,6 +55,9 @@ class RedisRepository(IEntryRepository):
         entry = await self.get(key)
         if entry is None:
             return 0
+        
+        if not isinstance(entry.value, RedisHash):
+            raise WrongTypeException()
         
         try:
             actual_dict = entry.value.value
@@ -71,4 +78,29 @@ class RedisRepository(IEntryRepository):
             del self._storage[key]
 
         return deleted_count
+
+    async def hexists(self, key: str, field: str) -> int:
+        value = await self.hget(key, field)
+        if not isinstance(value, RedisHash):
+            raise WrongTypeException()
+
+        if value is None:
+            return 0
+        return 1
+    
+    async def hlen(self, key: str) -> int:
+        entry = await self.get(key)
+        if entry is None:
+            return 0
+        
+        if not isinstance(entry.value, RedisHash):
+            raise WrongTypeException()
+        
+        try:
+            actual_dict = entry.value.value
+        except AttributeError:
+            return 0
+        
+        return len(actual_dict)
+        
 
