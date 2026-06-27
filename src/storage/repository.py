@@ -1,7 +1,7 @@
 import time
 from typing import Any
 
-from src.domain.entry import Entry
+from src.domain.entities.entry import Entry
 from src.interfaces.repository import IEntryRepository
 
 
@@ -35,3 +35,36 @@ class RedisRepository(IEntryRepository):
                 self._storage.pop(key, None)
 
         return deleted_count
+    
+    async def hget(self, key: str, field: str) -> str | None:
+        entry = await self.get(key)
+        if entry is None:
+            return None
+
+        try:
+            actual_dict = entry.value.value
+            return actual_dict.get(field)
+        except AttributeError:
+            return None
+        
+    async def hdel(self, key: str, fields: list[str]) -> int:
+        entry = await self.get(key)
+        if entry is None:
+            return 0
+        
+        try:
+            actual_dict = entry.value.value
+        except AttributeError:
+            return 0
+        
+        deleted_count = 0
+        for field in fields:
+            if field in actual_dict:
+                del actual_dict[field]
+                deleted_count += 1
+        
+        if len(actual_dict) == 0:
+            del self._storage[key]
+
+        return deleted_count
+

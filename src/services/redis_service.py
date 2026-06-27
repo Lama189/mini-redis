@@ -1,7 +1,9 @@
 import time
 
-from src.domain.entry import Entry
+from src.domain.entities.entry import Entry
 from src.interfaces.repository import IEntryRepository
+from src.domain.values.string import RedisString
+from src.domain.values.hash import RedisHash
 
 
 class RedisService:
@@ -15,7 +17,7 @@ class RedisService:
             expire_at = time.time() + ttl
 
         entry = Entry(
-            value=str(value),
+            value=RedisString(value),
             expire_at=expire_at
         )
 
@@ -27,7 +29,32 @@ class RedisService:
         if entry is None:
             return None
         
-        return entry.value
+        return entry.value.value
     
     async def delete(self, keys: list[str]) -> int:
         return await self._repo.delete(keys)
+    
+    async def hset(self, key: str, fields: dict, ttl: int | None = None) -> int:
+        expire_at = None
+
+        if ttl is not None:
+            expire_at = time.time() + ttl
+
+        entry = Entry(
+            value=RedisHash(fields),
+            expire_at=expire_at
+        )
+
+        await self._repo.set(key, entry)
+        return len(fields)
+
+    async def hget(self, key: str, field) -> str | None:
+        value = await self._repo.hget(key, field)
+
+        if value is None:
+            return None
+        
+        return value
+    
+    async def hdel(self, key: str, fields: list[str]) -> int:
+        return await self._repo.hdel(key, fields)

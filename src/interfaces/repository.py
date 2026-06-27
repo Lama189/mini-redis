@@ -1,6 +1,6 @@
 from abc import ABC, abstractmethod
 
-from src.domain.entry import Entry
+from src.domain.entities.entry import Entry
 
 
 class IEntryRepository(ABC):
@@ -14,4 +14,12 @@ class IEntryRepository(ABC):
     
     @abstractmethod
     async def delete(self, keys: list[str]) -> int:
+        raise NotImplementedError
+    
+    @abstractmethod
+    async def hget(self, key: str, field: str) -> str | None:
+        raise NotImplementedError
+    
+    @abstractmethod
+    async def hdel(self, key: str, fields: list[str]) -> int:
         raise NotImplementedError
