@@ -31,3 +31,7 @@ class IEntryRepository(ABC):
     @abstractmethod
     async def hlen(self, key: str) -> int:
         raise NotImplementedError
+    
+    @abstractmethod
+    async def hgetall(self, key: str) -> dict:
+        raise NotImplementedError

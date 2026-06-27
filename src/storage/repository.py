@@ -102,5 +102,20 @@ class RedisRepository(IEntryRepository):
             return 0
         
         return len(actual_dict)
+    
+    async def hgetall(self, key: str) -> dict:
+        entry = await self.get(key)
+        if entry is None:
+            return {}
+        
+        if not isinstance(entry.value, RedisHash):
+            raise WrongTypeException()
+        
+        try:
+            actual_dict = entry.value.value
+        except AttributeError:
+            return {}
+        
+        return actual_dict
         
 

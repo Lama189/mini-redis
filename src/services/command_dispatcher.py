@@ -67,6 +67,33 @@ async def dispatch_command(payload: list[str], service: RedisService) -> str:
             case "HLEN", [key]:
                 count = await service.hlen(key)
                 return f":{count}\r\n"
+            
+            case "HGETALL", [key]:
+                flat_list = await service.hgetall(key)
+
+                response_parts = [f"*{len(flat_list)}\r\n"]
+                for item in flat_list:
+                    response_parts.append(f"${len(item)}\r\n{item}\r\n")
+                    
+                return "".join(response_parts)
+            
+            case "HKEYS", [key]:
+                flat_list = await service.hkeys(key)
+
+                response_parts = [f"*{len(flat_list)}\r\n"]
+                for item in flat_list:
+                    response_parts.append(f"${len(item)}\r\n{item}\r\n")
+                    
+                return "".join(response_parts)
+            
+            case "HVALS", [key]:
+                flat_list = await service.hvals(key)
+
+                response_parts = [f"*{len(flat_list)}\r\n"]
+                for item in flat_list:
+                    response_parts.append(f"${len(item)}\r\n{item}\r\n")
+                    
+                return "".join(response_parts)
 
             case _:
                 return f"-ERR unknown command '{command}'\r\n"

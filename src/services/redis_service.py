@@ -64,3 +64,31 @@ class RedisService:
     
     async def hlen(self, key: str) -> int:
         return await self._repo.hlen(key)
+    
+    async def hgetall(self, key: str) -> list:
+        data_dict = await self._repo.hgetall(key)
+
+        flat_list = []
+        for k, v in data_dict.items():
+            flat_list.append(str(k))
+            flat_list.append(str(v))
+
+        return flat_list
+    
+    async def hkeys(self, key: str) -> list:
+        data_dict = await self._repo.hgetall(key)
+
+        flat_list = []
+        for k, v in data_dict.items():
+            flat_list.append(str(k))
+
+        return flat_list
+
+    async def hvals(self, key: str) -> list:
+        data_dict = await self._repo.hgetall(key)
+
+        flat_list = []
+        for k, v in data_dict.items():
+            flat_list.append(str(v))
+
+        return flat_list
