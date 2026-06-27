@@ -47,7 +47,7 @@ class RedisRepository(IEntryRepository):
         except AttributeError:
             return None
         
-    async def hdel(self, key: str, fields: list[str]) -> int:
+    async def hdel(self, key: str, fields: list[str] | None) -> int:
         entry = await self.get(key)
         if entry is None:
             return 0
@@ -57,6 +57,10 @@ class RedisRepository(IEntryRepository):
         except AttributeError:
             return 0
         
+        if fields is None or len(fields) == 0:
+            del self._storage[key]
+            return len(actual_dict)
+
         deleted_count = 0
         for field in fields:
             if field in actual_dict:

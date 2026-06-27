@@ -51,7 +51,9 @@ async def dispatch_command(payload: list[str], service: RedisService) -> str:
 
             return f"${len(value)}\r\n{value}\r\n"
         
-        case "HDEL", [key, *fields] if fields:
+        case "HDEL", [key, *fields]:
+            fields_arg = fields if len(fields) > 0 else None
+
             deleted = await service.hdel(key, fields) 
             return f":{deleted}\r\n"
 

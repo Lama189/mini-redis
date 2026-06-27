@@ -56,5 +56,5 @@ class RedisService:
         
         return value
     
-    async def hdel(self, key: str, fields: list[str]) -> int:
+    async def hdel(self, key: str, fields: list[str] | None) -> int:
         return await self._repo.hdel(key, fields)

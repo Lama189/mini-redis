@@ -21,5 +21,5 @@ class IEntryRepository(ABC):
         raise NotImplementedError
     
     @abstractmethod
-    async def hdel(self, key: str, fields: list[str]) -> int:
+    async def hdel(self, key: str, fields: list[str] | None) -> int:
         raise NotImplementedError
