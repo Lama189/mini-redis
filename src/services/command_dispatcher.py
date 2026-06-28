@@ -39,7 +39,8 @@ async def dispatch_command(
                 if value is None:
                     return "$-1\r\n"
 
-                return f"${len(value)}\r\n{value}\r\n"
+                encoded_value = value.encode('utf-8')
+                return f"${len(encoded_value)}\r\n{value}\r\n"
 
             case "DEL", [*keys] if keys:
                 deleted = await redis_service.delete(keys, raw_data)
@@ -51,6 +52,28 @@ async def dispatch_command(
                     return f":{new_val}\r\n"
                 except ValueError as e:
                     return f"-{str(e)}\r\n"
+            
+            case "LPUSH", [key, *items] if items:
+                length = await redis_service.lpush(key, items, raw_data)
+                return f":{length}\r\n"
+
+            case "RPUSH", [key, *items] if items:
+                length = await redis_service.rpush(key, items, raw_data)
+                return f":{length}\r\n"
+
+            case "LPOP", [key]:
+                value = await redis_service.lpop(key, raw_data)
+                if value is None:
+                    return "$-1\r\n"
+                encoded_value = value.encode('utf-8')
+                return f"${len(encoded_value)}\r\n{value}\r\n"
+
+            case "RPOP", [key]:
+                value = await redis_service.rpop(key, raw_data)
+                if value is None:
+                    return "$-1\r\n"
+                encoded_value = value.encode('utf-8')
+                return f"${len(encoded_value)}\r\n{value}\r\n"
             
             case "HSET", [key, *field_values, "EX", ttl_str] if len(field_values) >= 2 and len(field_values) % 2 == 0:
                 try:
@@ -70,11 +93,10 @@ async def dispatch_command(
                 if value is None:
                     return "$-1\r\n"
 
-                return f"${len(value)}\r\n{value}\r\n"
+                encoded_value = value.encode('utf-8')
+                return f"${len(encoded_value)}\r\n{value}\r\n"
             
             case "HDEL", [key, *fields]:
-                fields_arg = fields if len(fields) > 0 else None
-
                 deleted = await redis_service.hdel(key, fields, raw_data)
                 return f":{deleted}\r\n"
             
@@ -91,7 +113,8 @@ async def dispatch_command(
 
                 response_parts = [f"*{len(flat_list)}\r\n"]
                 for item in flat_list:
-                    response_parts.append(f"${len(item)}\r\n{item}\r\n")
+                    encoded_item = item.encode('utf-8')
+                    response_parts.append(f"${len(encoded_item)}\r\n{item}\r\n")
                     
                 return "".join(response_parts)
             
@@ -100,7 +123,8 @@ async def dispatch_command(
 
                 response_parts = [f"*{len(flat_list)}\r\n"]
                 for item in flat_list:
-                    response_parts.append(f"${len(item)}\r\n{item}\r\n")
+                    encoded_item = item.encode('utf-8')
+                    response_parts.append(f"${len(encoded_item)}\r\n{item}\r\n")
                     
                 return "".join(response_parts)
             
@@ -109,7 +133,8 @@ async def dispatch_command(
 
                 response_parts = [f"*{len(flat_list)}\r\n"]
                 for item in flat_list:
-                    response_parts.append(f"${len(item)}\r\n{item}\r\n")
+                    encoded_item = item.encode('utf-8')
+                    response_parts.append(f"${len(encoded_item)}\r\n{item}\r\n")
                     
                 return "".join(response_parts)
             
@@ -119,7 +144,6 @@ async def dispatch_command(
             
             case "SUBSCRIBE", [channel]:
                 client_queue = await pubsub_service.subscribe(channel)
-                subscribe_ack = f"*3\r\n$9\r\nsubscribe\r\n${len(channel)}\r\n{channel}\r\n:1\r\n"
                 return "SUBSCRIBE_SIGNAL", client_queue, channel
             
             case "BGREWRITEAOF", []:
@@ -166,7 +190,9 @@ async def dispatch_command(
 
                 for cmd in commands_to_run:
                     cmd_bytes = build_resp_bytes(cmd)
-                    result = await dispatch_command(cmd, redis_service, pubsub_service, cmd_bytes, session=None)
+                    result = await dispatch_command(
+                        cmd, redis_service, pubsub_service, cmd_bytes, disable_aof=True, session=None
+                    )
 
                     if isinstance(result, str):
                         tx_responses.append(result)
@@ -180,7 +206,6 @@ async def dispatch_command(
 
                 final_resp = f"*{len(tx_responses)}\r\n" + "".join(tx_responses)
                 return final_resp
-
 
             case _:
                 return f"-ERR unknown command '{command}'\r\n"

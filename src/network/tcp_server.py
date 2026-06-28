@@ -27,8 +27,8 @@ async def publish_loop(queue: asyncio.Queue, writer: asyncio.StreamWriter, chann
 def build_resp_bytes(command_parts: list[str]) -> bytes:
     res = f"*{len(command_parts)}\r\n"
     for part in command_parts:
-        encoded = part.encode('utf-8')
-        res += f"${len(encoded)}\r\n{part}\r\n"
+        encoded_part = part.encode('utf-8')
+        res += f"${len(encoded_part)}\r\n{part}\r\n"
 
     return res.encode('utf-8')
 

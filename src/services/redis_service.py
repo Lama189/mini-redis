@@ -4,8 +4,11 @@ import asyncio
 from src.services.aof_service import AofService
 from src.interfaces.repository import IEntryRepository
 from src.domain.entities.entry import Entry
+
 from src.domain.values.string import RedisString
 from src.domain.values.hash import RedisHash
+from src.domain.values.list import RedisList
+from src.domain.exceptions import WrongTypeException
 
 
 class RedisService:
@@ -148,3 +151,125 @@ class RedisService:
         if self.aof is not None:
             snapshot = self._repo.get_all_entries()
             asyncio.create_task(self.aof.background_rewrite(snapshot))
+
+    async def lpush(self, key: str, items: list[str], raw_data: bytes, ttl: int | None = None) -> int:
+        entry = await self._repo.get(key)
+        expire_at = time.time() + ttl if ttl is not None else None
+
+        if entry is None:
+            redis_list = RedisList()
+            redis_list.lpush(items)
+
+            entry = Entry(value=redis_list, expire_at=expire_at)
+            await self._repo.set(key, entry)
+
+            if self.aof and raw_data:
+                await self.aof.append(raw_data)
+            return len(redis_list)
+
+        if isinstance(entry.value, RedisString):
+            redis_list = RedisList()
+            redis_list.rpush([entry.value.value])
+            redis_list.lpush(items)
+
+            entry = Entry(value=redis_list, expire_at=expire_at)
+            await self._repo.set(key, entry)
+
+            if self.aof and raw_data:
+                await self.aof.append(raw_data)
+            return len(redis_list)
+
+        if not isinstance(entry.value, RedisList):
+            raise WrongTypeException()
+
+        length = entry.value.lpush(items)
+
+        if expire_at is not None:
+            entry.expire_at = expire_at
+
+        await self._repo.set(key, entry)
+
+        if self.aof and raw_data:
+            await self.aof.append(raw_data)
+
+        return length
+
+    async def rpush(self, key: str, items: list[str], raw_data: bytes, ttl: int | None = None) -> int:
+        entry = await self._repo.get(key)
+        expire_at = time.time() + ttl if ttl is not None else None
+
+        if entry is None:
+            redis_list = RedisList()
+            redis_list.rpush(items)
+
+            entry = Entry(value=redis_list, expire_at=expire_at)
+            await self._repo.set(key, entry)
+
+            if self.aof and raw_data:
+                await self.aof.append(raw_data)
+            return len(redis_list)
+
+        if isinstance(entry.value, RedisString):
+            redis_list = RedisList()
+            redis_list.rpush([entry.value.value])
+            redis_list.rpush(items)
+
+            entry = Entry(value=redis_list, expire_at=expire_at)
+            await self._repo.set(key, entry)
+
+            if self.aof and raw_data:
+                await self.aof.append(raw_data)
+            return len(redis_list)
+
+        if not isinstance(entry.value, RedisList):
+            raise WrongTypeException()
+
+        length = entry.value.rpush(items)
+
+        if expire_at is not None:
+            entry.expire_at = expire_at
+
+        await self._repo.set(key, entry)
+
+        if self.aof and raw_data:
+            await self.aof.append(raw_data)
+
+        return length
+    
+    async def lpop(self, key: str, raw_data: bytes) -> str | None:
+        entry = await self._repo.get(key)
+        if entry is None:
+            return None
+        
+        if not isinstance(entry.value, RedisList):
+            raise WrongTypeException()
+        
+        item = entry.value.lpop()
+
+        if len(entry.value) == 0:
+            await self._repo.delete([key])
+        else:
+            await self._repo.set(key, entry)
+
+        if self.aof and raw_data:
+            await self.aof.append(raw_data) 
+        return item    
+    
+    async def rpop(self, key: str, raw_data: bytes) -> str | None:
+        entry = await self._repo.get(key)
+        if entry is None:
+            return None
+        
+        if not isinstance(entry.value, RedisList):
+            raise WrongTypeException()
+        
+        item = entry.value.rpop()
+
+        if len(entry.value) == 0:
+            await self._repo.delete([key])
+        else:
+            await self._repo.set(key, entry)
+
+        if self.aof and raw_data:
+            await self.aof.append(raw_data) 
+        return item    
