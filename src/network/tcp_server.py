@@ -1,10 +1,12 @@
 import asyncio
 import io
+from typing import Optional
 
 from src.protocol.parser import parse_resp
 from src.services.command_dispatcher import dispatch_command
 from src.services.redis_service import RedisService
 from src.services.pubsub_service import PubSubService
+from src.domain.entities.session import ClientSession
 
 
 async def publish_loop(queue: asyncio.Queue, writer: asyncio.StreamWriter, channel: str):
@@ -40,8 +42,7 @@ async def handle_client(
     addr = writer.get_extra_info("peername")
     print(f"[*] Новое подключение от {addr}")
 
-    subscribed_channel = None
-    client_queue = None
+    session = ClientSession()
     publisher_task = None
 
     try:
@@ -65,10 +66,19 @@ async def handle_client(
 
                 if not isinstance(command, list):
                     pipeline_responses.append(b"-ERR protocol error\r\n")
+                    continue 
+
+                cmd_name = ""
+                if command and isinstance(command[0], str):
+                    cmd_name = command[0].upper()
+
+                if session.in_transaction and cmd_name not in ("EXEC", "DISCARD", "MULTI"):
+                    session.tx_queue.append(command)
+                    pipeline_responses.append(b"+QUEUED\r\n")
                     continue
 
                 raw_cmd_bytes = build_resp_bytes(command)
-                result = await dispatch_command(command, service, pubsub_service, raw_cmd_bytes)
+                result = await dispatch_command(command, service, pubsub_service, raw_cmd_bytes, session=session)
 
                 if isinstance(result, str):
                     pipeline_responses.append(result.encode())
@@ -77,8 +87,8 @@ async def handle_client(
                 if isinstance(result, tuple) and result[0] == "SUBSCRIBE_SIGNAL":
                     _, queue, channel = result
 
-                    subscribed_channel = channel
-                    client_queue = queue
+                    session.subscribed_channel = channel
+                    session.client_queue = queue
 
                     ack = (
                         f"*3\r\n"
@@ -113,12 +123,11 @@ async def handle_client(
             except asyncio.CancelledError:
                 pass
 
-        if subscribed_channel and client_queue:
-            await pubsub_service.unsubscribe(subscribed_channel, client_queue)
-            print(f"[*] Очередь подписчика удалена из канала {subscribed_channel}")
+        if session.subscribed_channel and session.client_queue:
+            await pubsub_service.unsubscribe(session.subscribed_channel, session.client_queue)
+            print(f"[*] Очередь подписчика удалена из канала {session.subscribed_channel}")
 
         writer.close()
-
         try:
             await writer.wait_closed()
         except (ConnectionError, BrokenPipeError):

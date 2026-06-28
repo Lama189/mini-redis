@@ -4,13 +4,16 @@ from typing import Union, Tuple
 from src.services.redis_service import RedisService
 from src.services.pubsub_service import PubSubService
 from src.domain.exceptions import WrongTypeException
+from src.domain.entities.session import ClientSession
 
 
 async def dispatch_command(
-    payload: list[str], 
+    payload: list[str],
     redis_service: RedisService,
     pubsub_service: PubSubService,
-    raw_data: bytes
+    raw_data: bytes,
+    disable_aof: bool = False,
+    session: ClientSession | None = None,
 ) -> Union[str, Tuple[str, asyncio.Queue, str]]:
     command = payload[0].upper()
     args = payload[1:]
@@ -41,6 +44,13 @@ async def dispatch_command(
             case "DEL", [*keys] if keys:
                 deleted = await redis_service.delete(keys, raw_data)
                 return f":{deleted}\r\n"
+            
+            case "INCR", [key]:
+                try: 
+                    new_val = await redis_service.incr(key, raw_data)
+                    return f":{new_val}\r\n"
+                except ValueError as e:
+                    return f"-{str(e)}\r\n"
             
             case "HSET", [key, *field_values, "EX", ttl_str] if len(field_values) >= 2 and len(field_values) % 2 == 0:
                 try:
@@ -118,6 +128,59 @@ async def dispatch_command(
                 
                 await redis_service.start_aof_rewrite()
                 return "+Background append only file rewriting started\r\n"
+            
+            case "MULTI", []:
+                if session is None:
+                    return "-ERR MULTI context missing\r\n"
+                if session.in_transaction:
+                    return "-ERR MULTI calls can not be nested\r\n"
+                
+                session.in_transaction = True
+                session.tx_queue.clear()
+                return "+OK\r\n"
+            
+            case "DISCARD", []:
+                if session is None or not session.in_transaction:
+                    return "-ERR DISCARD without MULTI\r\n"
+                
+                session.in_transaction = False
+                session.tx_queue.clear()
+                return "+OK\r\n"
+            
+            case "EXEC", []:
+                if session is None or not session.in_transaction:
+                    return "-ERR EXEC without MULTI\r\n"
+                
+                if not session.tx_queue:
+                    session.in_transaction = False
+                    return "*0\r\n"
+                
+                session.in_transaction = False
+                commands_to_run = session.tx_queue.copy()
+                session.tx_queue.clear()
+
+                tx_responses = []
+                tx_aof_bytes = []
+
+                from src.network.tcp_server import build_resp_bytes
+
+                for cmd in commands_to_run:
+                    cmd_bytes = build_resp_bytes(cmd)
+                    result = await dispatch_command(cmd, redis_service, pubsub_service, cmd_bytes, session=None)
+
+                    if isinstance(result, str):
+                        tx_responses.append(result)
+
+                        if not result.startswith("-ERR"):
+                            tx_aof_bytes.append(cmd_bytes)
+
+                if tx_aof_bytes and redis_service.aof is not None:
+                    all_tx_bytes = b"".join(tx_aof_bytes)
+                    await redis_service.aof.append(all_tx_bytes)
+
+                final_resp = f"*{len(tx_responses)}\r\n" + "".join(tx_responses)
+                return final_resp
+
 
             case _:
                 return f"-ERR unknown command '{command}'\r\n"

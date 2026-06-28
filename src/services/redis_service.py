@@ -42,6 +42,31 @@ class RedisService:
         
         return entry.value.value
     
+    async def incr(self, key: str, raw_data: bytes) -> int:
+        entry = await self._repo.get(key)
+        if entry is None:
+            return 0
+
+        if entry.value is None:
+            new_value = 1
+        else:
+            try:
+                raw_str_value = entry.value.value if hasattr(entry.value, 'value') else entry.value
+                new_value = int(raw_str_value) + 1
+            except ValueError:
+                raise ValueError("ERR value is not an integer or out of range")
+        
+        if hasattr(entry.value, 'value'):
+            entry.value.value = str(new_value)
+        else:
+            entry.value = str(new_value)
+            
+        await self._repo.set(key, entry)
+        if self.aof and raw_data:
+            await self.aof.append(raw_data)
+
+        return new_value
+    
     async def delete(self, keys: list[str], raw_data: bytes) -> int:
         count = await self._repo.delete(keys)
         if count > 0 and self.aof and raw_data:
