@@ -29,7 +29,7 @@ async def handle_client(
                 await writer.drain()
                 continue
 
-            response = await dispatch_command(command, service)
+            response = await dispatch_command(command, service, data)
 
             writer.write(response.encode())
             await writer.drain()

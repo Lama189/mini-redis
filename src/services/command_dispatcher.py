@@ -3,14 +3,18 @@ from src.services.redis_service import RedisService
 from src.domain.exceptions import WrongTypeException
 
 
-async def dispatch_command(payload: list[str], service: RedisService) -> str:
+async def dispatch_command(
+    payload: list[str], 
+    service: RedisService,
+    raw_data: bytes
+) -> str:
     command = payload[0].upper()
     args = payload[1:]
 
     try:
         match command, args:
             case "SET", [key, value]:
-                await service.set(key, value)
+                await service.set(key, value, raw_data)
                 return "+OK\r\n"
 
             case "SET", [key, value, "EX", ttl_str]:
@@ -19,7 +23,7 @@ async def dispatch_command(payload: list[str], service: RedisService) -> str:
                 except ValueError:
                     return "-ERR value is not an integer or out of range\r\n"
 
-                await service.set(key, value, ttl)
+                await service.set(key, value, raw_data, ttl)
                 return "+OK\r\n"
 
             case "GET", [key]:
@@ -31,7 +35,7 @@ async def dispatch_command(payload: list[str], service: RedisService) -> str:
                 return f"${len(value)}\r\n{value}\r\n"
 
             case "DEL", [*keys] if keys:
-                deleted = await service.delete(keys)
+                deleted = await service.delete(keys, raw_data)
                 return f":{deleted}\r\n"
             
             case "HSET", [key, *field_values, "EX", ttl_str] if len(field_values) >= 2 and len(field_values) % 2 == 0:
@@ -43,7 +47,7 @@ async def dispatch_command(payload: list[str], service: RedisService) -> str:
                 it = iter(field_values)
                 fields = dict(zip(it, it))
 
-                added = await service.hset(key, fields, ttl)
+                added = await service.hset(key, fields, raw_data, ttl)
                 return f":{added}\r\n"
             
             case "HGET", [key, field]:
@@ -57,7 +61,7 @@ async def dispatch_command(payload: list[str], service: RedisService) -> str:
             case "HDEL", [key, *fields]:
                 fields_arg = fields if len(fields) > 0 else None
 
-                deleted = await service.hdel(key, fields) 
+                deleted = await service.hdel(key, fields, raw_data)
                 return f":{deleted}\r\n"
             
             case "HEXISTS", [key, field]:
