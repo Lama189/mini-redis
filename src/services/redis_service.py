@@ -1,4 +1,5 @@
 import time
+import asyncio
 
 from src.services.aof_service import AofService
 from src.interfaces.repository import IEntryRepository
@@ -10,7 +11,7 @@ from src.domain.values.hash import RedisHash
 class RedisService:
     def __init__(self, repository: IEntryRepository, aof: AofService | None = None) -> None:
         self._repo = repository
-        self._aof = aof
+        self.aof = aof
 
     async def set(
         self, 
@@ -30,8 +31,8 @@ class RedisService:
         )
 
         await self._repo.set(key, entry)
-        if self._aof and raw_data:
-            await self._aof.append(raw_data)
+        if self.aof and raw_data:
+            await self.aof.append(raw_data)
 
     async def get(self, key: str) -> str | None:
         entry = await self._repo.get(key)
@@ -43,8 +44,8 @@ class RedisService:
     
     async def delete(self, keys: list[str], raw_data: bytes) -> int:
         count = await self._repo.delete(keys)
-        if count > 0 and self._aof and raw_data:
-            await self._aof.append(raw_data)
+        if count > 0 and self.aof and raw_data:
+            await self.aof.append(raw_data)
         return count
     
     async def hset(
@@ -65,8 +66,8 @@ class RedisService:
         )
 
         await self._repo.set(key, entry)
-        if self._aof and raw_data:
-            await self._aof.append(raw_data)
+        if self.aof and raw_data:
+            await self.aof.append(raw_data)
 
         return len(fields)
 
@@ -80,8 +81,8 @@ class RedisService:
     
     async def hdel(self, key: str, fields: list[str] | None, raw_data: bytes) -> int:
         count = await self._repo.hdel(key, fields)
-        if count > 0 and self._aof and raw_data:
-            await self._aof.append(raw_data)
+        if count > 0 and self.aof and raw_data:
+            await self.aof.append(raw_data)
         return count
     
     async def hexists(self, key: str, field: str) -> int:
@@ -117,3 +118,8 @@ class RedisService:
             flat_list.append(str(v))
 
         return flat_list
+    
+    async def start_aof_rewrite(self) -> None:
+        if self.aof is not None:
+            snapshot = self._repo.get_all_entries()
+            asyncio.create_task(self.aof.background_rewrite(snapshot))

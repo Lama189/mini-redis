@@ -135,3 +135,6 @@ class RedisRepository(IEntryRepository):
             if sample_size == 0 or (expired_count / sample_size) <= 0.25:
                 break
 
+    def get_all_entries(self) -> dict[str, Entry]:
+        return self._storage.copy()
+

@@ -39,3 +39,7 @@ class IEntryRepository(ABC):
     @abstractmethod
     async def expire_active_step(self) -> None:
         raise NotImplementedError
+    
+    @abstractmethod
+    def get_all_entries(self) -> dict[str, Entry]:
+        raise NotImplementedError

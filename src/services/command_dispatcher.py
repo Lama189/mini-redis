@@ -111,6 +111,13 @@ async def dispatch_command(
                 client_queue = await pubsub_service.subscribe(channel)
                 subscribe_ack = f"*3\r\n$9\r\nsubscribe\r\n${len(channel)}\r\n{channel}\r\n:1\r\n"
                 return "SUBSCRIBE_SIGNAL", client_queue, channel
+            
+            case "BGREWRITEAOF", []:
+                if redis_service.aof is None:
+                    return "-ERR AOF is disabled\r\n"
+                
+                await redis_service.start_aof_rewrite()
+                return "+Background append only file rewriting started\r\n"
 
             case _:
                 return f"-ERR unknown command '{command}'\r\n"
