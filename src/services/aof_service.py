@@ -30,7 +30,7 @@ class AofService:
         if self._file and not self._file.closed:
             self._file.close()
 
-    def read_aff_commands_from_file(self) -> list[list[str]]:
+    def read_all_commands_from_file(self) -> list[list[str]]:
         if not os.path.exists(self.filepath):
             return []
         
