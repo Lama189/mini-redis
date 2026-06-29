@@ -290,8 +290,57 @@ async def dispatch_command(
                         response_parts.append(f"${len(encoded_part)}\r\n{part}\r\n")
 
                 return "".join(response_parts)
-
             
+            case "XREAD", [*options] if options:
+                timeout_ms = None
+
+                if "BLOCK" in options:
+                    try:
+                        block_idx = options.index("BLOCK")
+                        timeout_ms = int(options[block_idx + 1])
+                    except (ValueError, IndexError):
+                        return "-ERR timeout is not an integer or out of range\r\n"
+                    
+                if "STREAMS" not in options:
+                    return "-ERR syntax error\r\n"
+
+                streams_idx = options.index("STREAMS")
+                try:
+                    stream_key = options[streams_idx + 1]
+                    stream_id = options[streams_idx + 2]
+                except IndexError:
+                    return "-ERR syntax error\r\n"
+                
+                if session is None:
+                    return "-ERR XREAD context missing\r\n"
+                
+                items = await redis_service.xread(stream_key, stream_id, timeout_ms, session)
+                if not items:
+                    return "$-1\r\n"
+                
+                response_parts = ["*1\r\n*2\r\n"]
+                encoded_key = stream_key.encode('utf-8')
+                response_parts.append(f"${len(encoded_key)}\r\n{stream_key}\r\n")
+                
+                response_parts.append(f"*{len(items)}\r\n")
+                for item_id, fields in items:
+                    response_parts.append("*2\r\n")
+                    
+                    encoded_id = item_id.encode('utf-8')
+                    response_parts.append(f"${len(encoded_id)}\r\n{item_id}\r\n")
+                    
+                    flat_fields = []
+                    for f_key, f_val in fields.items():
+                        flat_fields.append(f_key)
+                        flat_fields.append(f_val)
+                        
+                    response_parts.append(f"*{len(flat_fields)}\r\n")
+                    for part in flat_fields:
+                        encoded_part = part.encode('utf-8')
+                        response_parts.append(f"${len(encoded_part)}\r\n{part}\r\n")
+
+                return "".join(response_parts)
+
             case _:
                 return f"-ERR unknown command '{command}'\r\n"
 

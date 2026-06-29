@@ -11,4 +11,4 @@ class ClientSession:
     tx_queue: list[list[str]] = field(default_factory=list)
 
     blocking_event: asyncio.Event | None = None
-    blocking_result: str | None = None
+    blocking_result: str | list[tuple[str, dict[str, str]]] | None = None

@@ -444,6 +444,24 @@ class RedisService:
         if self.aof and raw_data:
             await self.aof.append(raw_data) 
 
+        waiters = self.wait_manager.get_and_clear_stream_waiters(key)
+        if waiters:
+            new_id_cmp = entry.value._parse_id(final_id)
+
+            for waiting_session, after_id_str in waiters:
+                if after_id_str == "$":
+                    should_wake = True
+                else:
+                    client_id_cmp = entry.value._parse_id(after_id_str)
+                    should_wake = new_id_cmp > client_id_cmp
+                
+                if should_wake:
+                    waiting_session.blocking_result = [(final_id, fields)]
+                    if waiting_session.blocking_event is not None:
+                        waiting_session.blocking_event.set()
+                else:
+                    self.wait_manager.add_stream_waiter(key, waiting_session, after_id_str)
+
         return final_id
     
 
@@ -478,3 +496,80 @@ class RedisService:
                 result.append((item_id, fields))
         
         return result
+    
+
+    async def xread_sync(self, key: str, after_id_str: str) -> list[tuple[str, dict[str, str]]] | None:
+        entry = await self._repo.get(key)
+        if entry is None:
+            return None
+        
+        if not isinstance(entry.value, RedisStream):
+            raise WrongTypeException()
+        
+        stream_data = entry.value.value
+        if not stream_data:
+            return []
+        
+        if after_id_str == "$":
+            target_cmp = entry.value._parse_id(entry.value._last_id_str)
+        else:
+            target_cmp = entry.value._parse_id(after_id_str)
+
+        result = []
+        for item_id, fields in stream_data.items():
+            item_cmp = entry.value._parse_id(item_id)
+
+            if item_cmp > target_cmp:
+                result.append((item_id, fields))
+
+        return result
+    
+
+    async def xread(
+        self,
+        key: str,
+        after_id_str: str,
+        timeout_ms: int,
+        session: ClientSession
+    ) -> list[tuple[str, dict[str, str]]] | None:
+        if after_id_str != "$":
+            fast_items = await self.xread_sync(key, after_id_str)
+            if fast_items:
+                return fast_items
+            
+        if timeout_ms is None:
+            return []
+        
+        event = asyncio.Event()
+        session.blocking_event = event
+        session.blocking_result = None
+
+        actual_after_id = after_id_str
+        if after_id_str == "$":
+            entry = await self._repo.get(key)
+           
+            if entry and isinstance(entry.value, RedisStream):
+                actual_after_id = entry.value._last_id_str
+            else:
+                actual_after_id = "0-0"
+
+        self.wait_manager.add_stream_waiter(key, session, actual_after_id)
+
+        try:
+            if timeout_ms == 0:
+                await event.wait()
+            else:
+                timeout_sec = float(timeout_ms) / 1000.0
+                try:
+                    await asyncio.wait_for(event.wait(), timeout=timeout_sec)
+                except asyncio.TimeoutError:
+                    self.wait_manager.remove_stream_waiter(key, session)
+                    return []
+            
+            if session.blocking_result and isinstance(session.blocking_result, list):
+                return session.blocking_result
+            return []
+        
+        finally:
+            session.blocking_event = None
+            session.blocking_result = None
