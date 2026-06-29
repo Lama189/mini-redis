@@ -18,15 +18,43 @@ class AofService:
         self._rewrite_buffer: list[bytes] = []
         self._is_rewriting = False
 
+        self._buffer = bytearray()
+        self._flusher_task: asyncio.Task | None = None
+
     def _open_file_if_needed(self) -> None:
         if self._file is None or self._file.closed:
-            self._file = open(self.filepath, "ab", buffering=0)
+            self._file = open(self.filepath, "ab")
 
-    def _write_and_sync(self, raw_resp_bytes: bytes) -> None:
+    def start(self) -> None:
+        if self._flusher_task is None or self._flusher_task.done():
+            self._flusher_task = asyncio.create_task(self._flusher_loop())
+
+    async def _flusher_loop(self) -> None:
+        while True:
+            try:
+                await asyncio.sleep(1.0)
+                await self.flush()
+            except asyncio.CancelledError:
+                await self.flush()
+                break
+            except Exception as e:
+                print(f"[-] Ошибка во время фонового сброса AOF: {e}")
+
+    async def flush(self) -> None:
+        if not self._buffer:
+            return
+
+        async with self._lock:
+            data_to_write = bytes(self._buffer)
+            self._buffer.clear()
+
+        await asyncio.to_thread(self._sync_buffer_to_disk, data_to_write)
+
+    def _sync_buffer_to_disk(self, data: bytes) -> None:
         self._open_file_if_needed()
-
         if self._file:
-            self._file.write(raw_resp_bytes)
+            self._file.write(data)
+            self._file.flush()
             os.fsync(self._file.fileno())
 
     async def append(self, raw_resp_bytes: bytes) -> None:
@@ -37,9 +65,11 @@ class AofService:
             if self._is_rewriting:
                 self._rewrite_buffer.append(raw_resp_bytes)
 
-            await asyncio.to_thread(self._write_and_sync, raw_resp_bytes)
+            self._buffer.extend(raw_resp_bytes)
 
     def close(self) -> None:
+        if self._flusher_task:
+            self._flusher_task.cancel()
         if self._file and not self._file.closed:
             self._file.close()
 
@@ -65,25 +95,21 @@ class AofService:
     
     def _build_resp_array(self, parts: list[str]) -> bytes:
         res = f"*{len(parts)}\r\n"
-
         for part in parts:
             res += f"${len(part)}\r\n{part}\r\n"
         return res.encode()
     
     def _serialize_entry_to_resp(self, key: str, entry: Entry) -> bytes | None:
         now = time.time()
-
         if entry.expire_at is not None:
             if entry.expire_at <= now:
                 return None
-            
             remaining_ttl = int(max(1, entry.expire_at - now))
         else:
             remaining_ttl = None
 
         if isinstance(entry.value, RedisString):
             cmd_parts = ["SET", key, entry.value.value]
-
             if remaining_ttl is not None:
                 cmd_parts.extend(["EX", str(remaining_ttl)])
             return self._build_resp_array(cmd_parts)
@@ -91,19 +117,16 @@ class AofService:
         if isinstance(entry.value, RedisHash):
             cmd_parts = ["HSET", key]
             hash_data = entry.value.value
-
             for h_key, h_val in hash_data.items():
                 cmd_parts.extend([h_key, h_val])
-
             if remaining_ttl is not None:
                 cmd_parts.extend(["EX", str(remaining_ttl)])
             return self._build_resp_array(cmd_parts)
         
-    def _write_snapshot_to_tmp_file(self,snapshot: dict[str, Entry], tmp_filepath: str) -> None:
+    def _write_snapshot_to_tmp_file(self, snapshot: dict[str, Entry], tmp_filepath: str) -> None:
         f = open(tmp_filepath, "wb")
         try:
             buffer: list[bytes] = []
-
             for key, entry in snapshot.items():
                 resp_bytes = self._serialize_entry_to_resp(key, entry)
                 if resp_bytes:
@@ -111,12 +134,8 @@ class AofService:
 
             if buffer:
                 f.write(b"".join(buffer))
-
             f.flush()
-
-            fd = f.fileno() 
-            os.fsync(fd)
-
+            os.fsync(f.fileno())
         finally:
             f.close()
 

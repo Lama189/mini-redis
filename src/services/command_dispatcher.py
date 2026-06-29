@@ -24,6 +24,7 @@ async def dispatch_command(
                 await redis_service.set(key, value, raw_data)
                 return "+OK\r\n"
 
+
             case "SET", [key, value, "EX", ttl_str]:
                 try:
                     ttl = int(ttl_str)
@@ -32,6 +33,7 @@ async def dispatch_command(
 
                 await redis_service.set(key, value, raw_data, ttl)
                 return "+OK\r\n"
+
 
             case "GET", [key]:
                 value = await redis_service.get(key)
@@ -42,24 +44,29 @@ async def dispatch_command(
                 encoded_value = value.encode('utf-8')
                 return f"${len(encoded_value)}\r\n{value}\r\n"
 
+
             case "DEL", [*keys] if keys:
                 deleted = await redis_service.delete(keys, raw_data)
                 return f":{deleted}\r\n"
-            
+
+
             case "INCR", [key]:
                 try: 
                     new_val = await redis_service.incr(key, raw_data)
                     return f":{new_val}\r\n"
                 except ValueError as e:
                     return f"-{str(e)}\r\n"
-            
+
+
             case "LPUSH", [key, *items] if items:
                 length = await redis_service.lpush(key, items, raw_data)
                 return f":{length}\r\n"
 
+
             case "RPUSH", [key, *items] if items:
                 length = await redis_service.rpush(key, items, raw_data)
                 return f":{length}\r\n"
+
 
             case "LPOP", [key]:
                 value = await redis_service.lpop(key, raw_data)
@@ -68,13 +75,15 @@ async def dispatch_command(
                 encoded_value = value.encode('utf-8')
                 return f"${len(encoded_value)}\r\n{value}\r\n"
 
+
             case "RPOP", [key]:
                 value = await redis_service.rpop(key, raw_data)
                 if value is None:
                     return "$-1\r\n"
                 encoded_value = value.encode('utf-8')
                 return f"${len(encoded_value)}\r\n{value}\r\n"
-            
+
+
             case "HSET", [key, *field_values, "EX", ttl_str] if len(field_values) >= 2 and len(field_values) % 2 == 0:
                 try:
                     ttl = int(ttl_str)
@@ -86,7 +95,8 @@ async def dispatch_command(
 
                 added = await redis_service.hset(key, fields, raw_data, ttl)
                 return f":{added}\r\n"
-            
+
+
             case "HGET", [key, field]:
                 value = await redis_service.hget(key, field)
 
@@ -95,19 +105,23 @@ async def dispatch_command(
 
                 encoded_value = value.encode('utf-8')
                 return f"${len(encoded_value)}\r\n{value}\r\n"
-            
+
+
             case "HDEL", [key, *fields]:
                 deleted = await redis_service.hdel(key, fields, raw_data)
                 return f":{deleted}\r\n"
-            
+
+
             case "HEXISTS", [key, field]:
                 value = await redis_service.hexists(key, field)
                 return f":{value}\r\n"
-            
+
+
             case "HLEN", [key]:
                 count = await redis_service.hlen(key)
                 return f":{count}\r\n"
-            
+
+
             case "HGETALL", [key]:
                 flat_list = await redis_service.hgetall(key)
 
@@ -117,7 +131,8 @@ async def dispatch_command(
                     response_parts.append(f"${len(encoded_item)}\r\n{item}\r\n")
                     
                 return "".join(response_parts)
-            
+
+
             case "HKEYS", [key]:
                 flat_list = await redis_service.hkeys(key)
 
@@ -127,7 +142,8 @@ async def dispatch_command(
                     response_parts.append(f"${len(encoded_item)}\r\n{item}\r\n")
                     
                 return "".join(response_parts)
-            
+
+
             case "HVALS", [key]:
                 flat_list = await redis_service.hvals(key)
 
@@ -137,22 +153,26 @@ async def dispatch_command(
                     response_parts.append(f"${len(encoded_item)}\r\n{item}\r\n")
                     
                 return "".join(response_parts)
-            
+
+
             case "PUBLISH", [channel, message]:
                 receiver_count = await pubsub_service.publish(channel, message)
                 return f":{receiver_count}\r\n"
-            
+
+
             case "SUBSCRIBE", [channel]:
                 client_queue = await pubsub_service.subscribe(channel)
                 return "SUBSCRIBE_SIGNAL", client_queue, channel
-            
+
+
             case "BGREWRITEAOF", []:
                 if redis_service.aof is None:
                     return "-ERR AOF is disabled\r\n"
                 
                 await redis_service.start_aof_rewrite()
                 return "+Background append only file rewriting started\r\n"
-            
+
+
             case "MULTI", []:
                 if session is None:
                     return "-ERR MULTI context missing\r\n"
@@ -162,7 +182,8 @@ async def dispatch_command(
                 session.in_transaction = True
                 session.tx_queue.clear()
                 return "+OK\r\n"
-            
+
+
             case "DISCARD", []:
                 if session is None or not session.in_transaction:
                     return "-ERR DISCARD without MULTI\r\n"
@@ -170,7 +191,8 @@ async def dispatch_command(
                 session.in_transaction = False
                 session.tx_queue.clear()
                 return "+OK\r\n"
-            
+
+
             case "EXEC", []:
                 if session is None or not session.in_transaction:
                     return "-ERR EXEC without MULTI\r\n"
@@ -206,7 +228,8 @@ async def dispatch_command(
 
                 final_resp = f"*{len(tx_responses)}\r\n" + "".join(tx_responses)
                 return final_resp
-            
+
+
             case "BLPOP", [key, timeout_str]:
                 try:
                     timeout = int(timeout_str)
@@ -228,7 +251,8 @@ async def dispatch_command(
                     f"${len(encoded_key)}\r\n{key}\r\n"
                     f"${len(encoded_val)}\r\n{value}\r\n"
                 )
-            
+
+
             case "BRPOP", [key, timeout_str]:
                 try:
                     timeout = int(timeout_str)
@@ -250,7 +274,8 @@ async def dispatch_command(
                     f"${len(encoded_key)}\r\n{key}\r\n"
                     f"${len(encoded_val)}\r\n{value}\r\n"
                 )
-            
+
+
             case "XADD", [key, id_str, *raw_args] if raw_args:
                 field_values = [v for v in raw_args if v]
 
@@ -266,7 +291,8 @@ async def dispatch_command(
                 
                 encoded_id = result_id.encode('utf-8')
                 return f"${len(encoded_id)}\r\n{result_id}\r\n"
-            
+
+
             case "XRANGE", [key, start_str, end_str]:
                 items = await redis_service.xrange(key, start_str, end_str)
                 if items is None:
@@ -290,7 +316,8 @@ async def dispatch_command(
                         response_parts.append(f"${len(encoded_part)}\r\n{part}\r\n")
 
                 return "".join(response_parts)
-            
+
+
             case "XREAD", [*options] if options:
                 timeout_ms = None
 
@@ -340,6 +367,7 @@ async def dispatch_command(
                         response_parts.append(f"${len(encoded_part)}\r\n{part}\r\n")
 
                 return "".join(response_parts)
+
 
             case _:
                 return f"-ERR unknown command '{command}'\r\n"

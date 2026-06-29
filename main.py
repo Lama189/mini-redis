@@ -16,9 +16,11 @@ async def main():
     port = 6379
 
     repository = RedisRepository()
-    aof = AofService()
     pubsub_service = PubSubService()
     wait_manager = WaitManager()
+    
+    aof = AofService()
+    aof.start()
 
     replay_service = RedisService(repository, aof=None, wait_manager=wait_manager)
 

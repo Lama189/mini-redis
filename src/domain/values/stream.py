@@ -10,8 +10,12 @@ class RedisStream:
     @property
     def value(self) -> dict[str, dict[str, str]]:
         return self._value
-    
-    def _parse_id(self, id_str) -> tuple[int, int]:
+
+    @property
+    def last_id_str(self) -> str:
+        return self._last_id_str
+
+    def parse_id(self, id_str) -> tuple[int, int]:
         parts = id_str.split("-")
         if len(parts) != 2:
             raise ValueError("-ERR Invalid stream ID format\r\n")
@@ -22,7 +26,7 @@ class RedisStream:
         
     def _generate_id(self) -> str:
         now_ms = int(time.time() * 1000)
-        last_ms, last_seq = self._parse_id(self._last_id_str)
+        last_ms, last_seq = self.parse_id(self.last_id_str)
 
         if now_ms > last_ms:
             return f"{now_ms}-0"
@@ -35,8 +39,8 @@ class RedisStream:
         if id_str == "*":
             final_id = self._generate_id()
         else:
-            new_ms, new_seq = self._parse_id(id_str)
-            last_ms, last_seq = self._parse_id(self._last_id_str)
+            new_ms, new_seq = self.parse_id(id_str)
+            last_ms, last_seq = self.parse_id(self.last_id_str)
 
             if (new_ms < last_ms) or (new_ms == last_ms and new_seq <= last_seq):
                 raise ValueError("-ERR The ID specified in XADD is equal or smaller than the target stream top item\r\n")

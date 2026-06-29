@@ -446,13 +446,13 @@ class RedisService:
 
         waiters = self.wait_manager.get_and_clear_stream_waiters(key)
         if waiters:
-            new_id_cmp = entry.value._parse_id(final_id)
+            new_id_cmp = entry.value.parse_id(final_id)
 
             for waiting_session, after_id_str in waiters:
                 if after_id_str == "$":
                     should_wake = True
                 else:
-                    client_id_cmp = entry.value._parse_id(after_id_str)
+                    client_id_cmp = entry.value.parse_id(after_id_str)
                     should_wake = new_id_cmp > client_id_cmp
                 
                 if should_wake:
@@ -483,14 +483,14 @@ class RedisService:
             if id_str == "+":
                 return (9223372036854775807, 9223372036854775807)
             
-            return entry.value._parse_id(id_str)
+            return entry.value.parse_id(id_str)
         
         start_cmp = to_cmp_tuple(start_str)
         end_cmp = to_cmp_tuple(end_str)
 
         result = []
         for item_id, fields in stream_data.items():
-            item_cmp = entry.value._parse_id(item_id)
+            item_cmp = entry.value.parse_id(item_id)
 
             if start_cmp <= item_cmp <= end_cmp:
                 result.append((item_id, fields))
@@ -511,13 +511,13 @@ class RedisService:
             return []
         
         if after_id_str == "$":
-            target_cmp = entry.value._parse_id(entry.value._last_id_str)
+            target_cmp = entry.value.parse_id(entry.value.last_id_str)
         else:
-            target_cmp = entry.value._parse_id(after_id_str)
+            target_cmp = entry.value.parse_id(after_id_str)
 
         result = []
         for item_id, fields in stream_data.items():
-            item_cmp = entry.value._parse_id(item_id)
+            item_cmp = entry.value.parse_id(item_id)
 
             if item_cmp > target_cmp:
                 result.append((item_id, fields))
@@ -549,7 +549,7 @@ class RedisService:
             entry = await self._repo.get(key)
            
             if entry and isinstance(entry.value, RedisStream):
-                actual_after_id = entry.value._last_id_str
+                actual_after_id = entry.value.last_id_str
             else:
                 actual_after_id = "0-0"
 
