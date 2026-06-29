@@ -3,14 +3,16 @@ import asyncio
 
 from src.services.aof_service import AofService
 from src.services.wait_manager import WaitManager
-from src.interfaces.repository import IEntryRepository
+
 from src.domain.entities.entry import Entry
 from src.domain.entities.session import ClientSession
-
 from src.domain.values.string import RedisString
 from src.domain.values.hash import RedisHash
 from src.domain.values.list import RedisList
+from src.domain.values.stream import RedisStream
+
 from src.domain.exceptions import WrongTypeException
+from src.interfaces.repository import IEntryRepository
 
 
 class RedisService:
@@ -407,3 +409,39 @@ class RedisService:
         finally:
             session.blocking_event = None
             session.blocking_result = None
+
+    
+    async def xadd(
+        self,
+        key: str,
+        id_str: str,
+        fields: dict[str, str],
+        raw_data: bytes
+    ) -> str:
+        entry = await self._repo.get(key)
+
+        if entry is None:
+            stream = RedisStream()
+            try:
+                final_id = stream.add(id_str, fields)
+            except ValueError as e:
+                return str(e)
+            
+            entry = Entry(value=stream, expire_at=None)
+            await self._repo.set(key, entry)
+        
+        elif isinstance(entry.value, RedisStream):
+            try:
+                final_id = entry.value.add(id_str, fields)
+            except ValueError as e:
+                return str(e)
+            
+            await self._repo.set(key, entry)
+        
+        else:
+            raise WrongTypeException()
+        
+        if self.aof and raw_data:
+            await self.aof.append(raw_data) 
+
+        return final_id

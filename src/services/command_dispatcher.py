@@ -250,7 +250,23 @@ async def dispatch_command(
                     f"${len(encoded_key)}\r\n{key}\r\n"
                     f"${len(encoded_val)}\r\n{value}\r\n"
                 )
+            
+            case "XADD", [key, id_str, *raw_args] if raw_args:
+                field_values = [v for v in raw_args if v]
 
+                if len(field_values) % 2 != 0:
+                    return "-ERR error reading a string from the connection\r\n"
+                
+                it = iter(field_values)
+                fields = dict(zip(it, it))
+
+                result_id = await redis_service.xadd(key, id_str, fields, raw_data)
+                if result_id.startswith("-ERR"):
+                    return result_id
+                
+                encoded_id = result_id.encode('utf-8')
+                return f"${len(encoded_id)}\r\n{result_id}\r\n"
+            
             case _:
                 return f"-ERR unknown command '{command}'\r\n"
         
