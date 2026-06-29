@@ -13,14 +13,19 @@ async def publish_loop(queue: asyncio.Queue, writer: asyncio.StreamWriter, chann
     while True:
         msg = await queue.get()
 
+        channel_b = channel.encode("utf-8")
+        msg_b = msg.encode("utf-8")
+
         resp = (
-            f"*3\r\n"
-            f"$7\r\nmessage\r\n"
-            f"${len(channel)}\r\n{channel}\r\n"
-            f"${len(msg)}\r\n{msg}\r\n"
+            b"*3\r\n"
+            b"$7\r\nmessage\r\n"
+            + f"${len(channel_b)}\r\n".encode()
+            + channel_b + b"\r\n"
+            + f"${len(msg_b)}\r\n".encode()
+            + msg_b + b"\r\n"
         )
 
-        writer.write(resp.encode())
+        writer.write(resp)
         await writer.drain()
 
 
