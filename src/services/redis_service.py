@@ -445,3 +445,36 @@ class RedisService:
             await self.aof.append(raw_data) 
 
         return final_id
+    
+
+    async def xrange(self, key: str, start_str: str, end_str: str) -> list[tuple[str, dict[str, str]]] | None:
+        entry = await self._repo.get(key)
+        if entry is None:
+            return None
+        
+        if not isinstance(entry.value, RedisStream):
+            raise WrongTypeException()
+        
+        stream_data = entry.value.value
+        if not stream_data:
+            return []
+        
+        def to_cmp_tuple(id_str: str) -> tuple[int, int]:
+            if id_str == "-":
+                return (0, 0)
+            if id_str == "+":
+                return (9223372036854775807, 9223372036854775807)
+            
+            return entry.value._parse_id(id_str)
+        
+        start_cmp = to_cmp_tuple(start_str)
+        end_cmp = to_cmp_tuple(end_str)
+
+        result = []
+        for item_id, fields in stream_data.items():
+            item_cmp = entry.value._parse_id(item_id)
+
+            if start_cmp <= item_cmp <= end_cmp:
+                result.append((item_id, fields))
+        
+        return result

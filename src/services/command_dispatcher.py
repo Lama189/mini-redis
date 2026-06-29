@@ -267,9 +267,34 @@ async def dispatch_command(
                 encoded_id = result_id.encode('utf-8')
                 return f"${len(encoded_id)}\r\n{result_id}\r\n"
             
+            case "XRANGE", [key, start_str, end_str]:
+                items = await redis_service.xrange(key, start_str, end_str)
+                if items is None:
+                    return "*0\r\n"
+                
+                response_parts = [f"*{len(items)}\r\n"]
+                for item_id, fields in items:
+                    response_parts.append("*2\r\n")
+
+                    encoded_id = item_id.encode('utf-8')
+                    response_parts.append(f"${len(encoded_id)}\r\n{item_id}\r\n")
+
+                    flat_fields = []
+                    for f_key, f_val in fields.items():
+                        flat_fields.append(f_key)
+                        flat_fields.append(f_val)
+
+                    response_parts.append(f"*{len(flat_fields)}\r\n")
+                    for part in flat_fields:
+                        encoded_part = part.encode('utf-8')
+                        response_parts.append(f"${len(encoded_part)}\r\n{part}\r\n")
+
+                return "".join(response_parts)
+
+            
             case _:
                 return f"-ERR unknown command '{command}'\r\n"
-        
+
     except WrongTypeException:
         return "-WRONGTYPE Operation against a key holding the wrong kind of value\r\n"
     except Exception as e:
