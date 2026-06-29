@@ -206,6 +206,50 @@ async def dispatch_command(
 
                 final_resp = f"*{len(tx_responses)}\r\n" + "".join(tx_responses)
                 return final_resp
+            
+            case "BLPOP", [key, timeout_str]:
+                try:
+                    timeout = int(timeout_str)
+                except ValueError:
+                    return "-ERR timeout is not an integer or out of range\r\n"
+                
+                if session is None:
+                    return "-ERR BLPOP context missing\r\n"
+                
+                value = await redis_service.blpop(key, timeout, session, raw_data)
+                if value is None:
+                    return "$-1\r\n"
+                
+                encoded_key = key.encode('utf-8')
+                encoded_val = value.encode('utf-8')
+                
+                return (
+                    f"*2\r\n"
+                    f"${len(encoded_key)}\r\n{key}\r\n"
+                    f"${len(encoded_val)}\r\n{value}\r\n"
+                )
+            
+            case "BRPOP", [key, timeout_str]:
+                try:
+                    timeout = int(timeout_str)
+                except ValueError:
+                    return "-ERR timeout is not an integer or out of range\r\n"
+                
+                if session is None:
+                    return "-ERR BLPOP context missing\r\n"
+                
+                value = await redis_service.brpop(key, timeout, session, raw_data)
+                if value is None:
+                    return "$-1\r\n"
+                
+                encoded_key = key.encode('utf-8')
+                encoded_val = value.encode('utf-8')
+                
+                return (
+                    f"*2\r\n"
+                    f"${len(encoded_key)}\r\n{key}\r\n"
+                    f"${len(encoded_val)}\r\n{value}\r\n"
+                )
 
             case _:
                 return f"-ERR unknown command '{command}'\r\n"

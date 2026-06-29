@@ -4,6 +4,7 @@ from functools import partial
 from src.services.redis_service import RedisService
 from src.services.pubsub_service import PubSubService
 from src.services.aof_service import AofService
+from src.services.wait_manager import WaitManager
 from src.services.ttl_service import active_expire_worker
 from src.services.command_dispatcher import dispatch_command
 from src.storage.repository import RedisRepository
@@ -17,8 +18,9 @@ async def main():
     repository = RedisRepository()
     aof = AofService()
     pubsub_service = PubSubService()
+    wait_manager = WaitManager()
 
-    replay_service = RedisService(repository, aof=None)
+    replay_service = RedisService(repository, aof=None, wait_manager=wait_manager)
 
     print("[*] Старт восстановления из AOF...")
     saved_commands = aof.read_all_commands_from_file()
@@ -27,7 +29,7 @@ async def main():
         await dispatch_command(cmd_parts, replay_service, pubsub_service, b"")
     print(f"[*] База успешно восстановлена. Команд накатано: {len(saved_commands)}")
 
-    main_service = RedisService(repository, aof=aof)
+    main_service = RedisService(repository, aof=aof, wait_manager=wait_manager)
     ttl_task = asyncio.create_task(active_expire_worker(repository, 1.0))
 
     client_callback = partial(
